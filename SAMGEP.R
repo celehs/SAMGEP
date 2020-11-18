@@ -10,10 +10,7 @@ library(foreach)
 library(doParallel)
 library(parallel)
 library(abind)
-
-
-logit <- function(x){log(x/(1-x))}
-expit <- function(x){1/(1+exp(-x))}
+library(nloptr)
 
 
 fitGLS <- function(dat,nX=11,r=1){
@@ -62,6 +59,8 @@ trainTransitionMatrix <- function(train){
 
 
 Estep_partial <- function(dat,trained,nX=11){
+  expit <- function(x){1/(1+exp(-x))}
+  
   priorModel <- trained$priorModel; likeModel <- trained$likeModel; transCoefs <- trained$transCoefs
   a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
   amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
@@ -70,7 +69,7 @@ Estep_partial <- function(dat,trained,nX=11){
   post <- c()
   for (pat in unique(dat$ID)){
     # Find patient-specific parameters
-    patIdx <- which(dat$ID == patient)
+    patIdx <- which(dat$ID == pat)
     Ti <- dat$T[patIdx]; Tlogi <- dat$Tlog[patIdx];
     Hi <- unique(dat$H[patIdx]); Hlogi <- unique(dat$Hlog[patIdx])
     prior_i <- prior_fitted[patIdx]
@@ -89,9 +88,9 @@ Estep_partial <- function(dat,trained,nX=11){
     A1 <- sqrt(1-amin1^2) %*% t(sqrt(1-amin1^2)); A2 <- sqrt(1-amin2^2) %*% t(sqrt(1-amin2^2))
     Sigma_cond1 <- A1 * Sigma; Sigma_cond2 <- A2 * Sigma
     
-    Xi <- as.matrix(dat[encounters,paste0('X',1:nX)])
+    Xi <- as.matrix(dat[patIdx,paste0('X',1:nX)])
     
-    post_i <- rep(NA,length(Ti))
+    post_i <- c()
     for (t in 1:length(Ti)){
       # Patient has 1 timepoint
       if (length(Ti) == 1){
@@ -99,7 +98,7 @@ Estep_partial <- function(dat,trained,nX=11){
         logprobs <- logprior + c(mvtnorm::dmvnorm(Xi[t,],mus[[1]][,t],Sigma,log=TRUE),
                                  mvtnorm::dmvnorm(Xi[t,],mus[[2]][,t],Sigma,log=TRUE))
         probs <- exp(logprobs - max(logprobs))
-        post_i[t] <- c(probs[2]/sum(probs), rep(0,4))
+        post_i <- c(post_i, probs[2]/sum(probs), rep(0,4))
       }
       
       # Currently on patient's first timepoint
@@ -124,7 +123,7 @@ Estep_partial <- function(dat,trained,nX=11){
           }
         }
         probs <- exp(logprobs - max(logprobs))
-        post_i[t] <- c(sum(probs[2,])/sum(probs), rep(0,4))
+        post_i <- c(post_i, sum(probs[2,])/sum(probs), rep(0,4))
       }
       
       # Currently on patient's last timepoint
@@ -149,7 +148,7 @@ Estep_partial <- function(dat,trained,nX=11){
           }
         }
         probs <- exp(logprobs - max(logprobs))
-        post_i[t] <- c(sum(probs[,2])/sum(probs), probs/sum(probs))
+        post_i <- c(post_i, sum(probs[,2])/sum(probs), probs/sum(probs))
       }
       
       # Currently on intermediate timepoint
@@ -183,7 +182,7 @@ Estep_partial <- function(dat,trained,nX=11){
           }
         }
         probs <- exp(logprobs - max(logprobs))
-        post_i[t] <- c(sum(probs[,2,])/sum(probs), probs[,,1]/sum(probs[,,1]))
+        post_i <- c(post_i, sum(probs[,2,])/sum(probs), probs[,,1]/sum(probs[,,1]))
       }
     }
 
@@ -219,6 +218,8 @@ Mstep <- function(train,train_interTemp=NULL,nX=11,r=1){
 
 # Full Markov implementation
 Estep_full <- function(dat,trained,nX=11){
+  expit <- function(x){1/(1+exp(-x))}
+  
   priorModel <- trained$priorModel; likeModel <- trained$likeModel; transCoefs <- trained$transCoefs
   a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
   amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
@@ -311,6 +312,8 @@ Estep_full <- function(dat,trained,nX=11){
 
 
 cumulative_prob <- function(dat,trained,nX=11){
+  expit <- function(x){1/(1+exp(-x))}
+  
   priorModel <- trained$priorModel; likeModel <- trained$likeModel; transCoefs <- trained$transCoefs
   a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
   amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
@@ -404,23 +407,23 @@ cumulative_prob <- function(dat,trained,nX=11){
 }
 
 
-EM <- function(train,observedPats,test=NULL,maxIt=1,r=0.8,tol=0.01,Estep=Estep_partial){
+EM <- function(train,observedPats,test=NULL,maxIt=1,r=0.8,tol=0.01,Estep=Estep_partial,nX=11){
   observedIndices <- which(train$ID %in% observedPats)
   unobservedIndices <- setdiff(seq(nrow(train)),observedIndices)
   train$pY <- train$pInv <- 1
   prediction <- aucs <- NULL
   lastY <- train$Y[unobservedIndices]
   
-  trained_sup <- trained_semisup <- Mstep(train[observedIndices,],r=r)
+  trained_sup <- trained_semisup <- Mstep(train[observedIndices,],r=r,nX=nX)
   if (!is.null(test)){
-    prediction <- Estep(test,trained_sup)
+    prediction <- Estep(test,trained_sup,nX=nX)
     aucs <- c(pROC::auc(test$Y,prediction),rep(0,maxIt))
   }
   
   for (it in 1:maxIt){
     
     # E-step
-    prediction <- Estep(train[unobservedIndices,],trained_semisup)
+    prediction <- Estep(train[unobservedIndices,],trained_semisup,nX=nX)
     transProbs <- attr(prediction,'post2')
     
     train_augmented <- rbind(train[observedIndices,],train[unobservedIndices,],train[unobservedIndices,])
@@ -442,10 +445,10 @@ EM <- function(train,observedPats,test=NULL,maxIt=1,r=0.8,tol=0.01,Estep=Estep_p
                                rep(train$T[unobservedIndices[-length(unobservedIndices)]],4))
     
     # M-step    
-    trained_semisup <- Mstep(train_augmented,train_interTemp,r=r)
+    trained_semisup <- Mstep(train_augmented,train_interTemp,r=r,nX=nX)
     
     if (!is.null(test)){
-      testpred <- Estep(test,trained_semisup)
+      testpred <- Estep(test,trained_semisup,nX=nX)
       aucs[it+1] <- pROC::auc(test$Y,testpred)      
     }
     
@@ -460,24 +463,28 @@ EM <- function(train,observedPats,test=NULL,maxIt=1,r=0.8,tol=0.01,Estep=Estep_p
 }
 
 
-lineSearch <- function(train,observedPats,test=NULL,nCrosses=5,alphas=seq(0,1,.1),r=0.8,Estep=Estep_partial){
+lineSearch <- function(train,observedPats,test=NULL,nCrosses=5,alphas=seq(0,1,.1),
+                       r=0.8,Estep=Estep_partial,nX=11){
   if (length(alphas) == 1){
     alpha <- alphas
   }
   else{
     n <- length(observedPats)
     observedPats <- sample(observedPats)
-    valPats_overall <- lapply(1:nCrosses, function(i){observedPats[round(n*(i-1)/nCrosses+1):round(n*i/nCrosses)]})
+    valPats_overall <- lapply(1:nCrosses, function(i){
+      observedPats[round(n*(i-1)/nCrosses+1):round(n*i/nCrosses)]
+    })
     
-    alpha_results <- as.matrix(foreach(i=1:nCrosses, .combine=cbind) %dopar% {
+    alpha_results <- as.matrix(foreach(i=1:nCrosses, .combine=cbind, .packages=c('pROC','nlme'),
+                                       .export=c('EM','Estep','Mstep','fitGLS','cumulative_prob','abind')) %dopar% {
       validatePats <- valPats_overall[[i]]
       trainPats <- setdiff(observedPats,validatePats)
       validateIndices <- which(train$ID %in% validatePats)
       
       tryCatch({
-        em <- EM(train,trainPats,r=r,Estep=Estep)
-        supervised <- Estep(train[validateIndices,],em$fitted_sup)
-        semisupervised <- Estep(train[validateIndices,],em$fitted_semisup)
+        em <- EM(train,trainPats,r=r,Estep=Estep,nX=nX)
+        supervised <- Estep(train[validateIndices,],em$fitted_sup,nX=nX)
+        semisupervised <- Estep(train[validateIndices,],em$fitted_semisup,nX=nX)
         
         sapply(alphas,function(alpha){
           mixture <- alpha*semisupervised + (1-alpha)*supervised
@@ -493,17 +500,17 @@ lineSearch <- function(train,observedPats,test=NULL,nCrosses=5,alphas=seq(0,1,.1
   }
   
   if (!is.null(test)){
-    em <- EM(train,observedPats,test,r=r,Estep=Estep)
-    supervised <- Estep(test,em$fitted_sup)
-    semisupervised <- Estep(test,em$fitted_semisup)
+    em <- EM(train,observedPats,test,r=r,Estep=Estep,nX=nX)
+    supervised <- Estep(test,em$fitted_sup,nX=nX)
+    semisupervised <- Estep(test,em$fitted_semisup,nX=nX)
     mixture <- alpha*semisupervised + (1-alpha)*supervised
     
-    cumSup <- cumulative_prob(test,em$fitted_sup)
-    cumSemisup <- cumulative_prob(test,em$fitted_semisup)
+    cumSup <- cumulative_prob(test,em$fitted_sup,nX=nX)
+    cumSemisup <- cumulative_prob(test,em$fitted_semisup,nX=nX)
     cumMixture <- alpha*cumSemisup + (1-alpha)*cumSup
   }
   else{
-    supervised <- semisupervised <- mixture <- resultSup <- resultSemisup <- resultMix <- cumSup <- cumSemisup <- cumMixture <- NULL
+    supervised <- semisupervised <- mixture <- cumSup <- cumSemisup <- cumMixture <- NULL
   }
   
   return(list('alpha'=alpha,'prediction'=mixture,
@@ -512,7 +519,7 @@ lineSearch <- function(train,observedPats,test=NULL,nCrosses=5,alphas=seq(0,1,.1
 }
 
 
-cv.r <- function(train,observedPats,nCrosses=5,rs=seq(0,1,.1),Estep=Estep_partial){
+cv.r <- function(train,observedPats,nCrosses=5,rs=seq(0,1,.1),Estep=Estep_partial,nX=11){
   n <- length(observedPats)
   observedPats <- sample(observedPats)
   valPats_overall <- lapply(1:nCrosses, function(i){
@@ -520,13 +527,14 @@ cv.r <- function(train,observedPats,nCrosses=5,rs=seq(0,1,.1),Estep=Estep_partia
   })
   
   suppressWarnings({
-    grid <- foreach(i=1:nCrosses, .combine=cbind) %doPar% {
+    grid <- foreach(i=1:nCrosses, .combine=cbind, .export=c('Mstep','Estep','fitGLS','abind'),
+                    .packages=c('pROC','nlme','foreach','parallel','doParallel')) %dopar% {
     validatePats <- valPats_overall[[i]]
     trainPats <- setdiff(observedPats,validatePats)
     
-    foreach(r=rs, .combine=c) %dopar% {
-      fitted_M <- Mstep(train[train$ID %in% trainPats,],r=r)
-      supervised <- Estep(train[train$ID %in% validatePats,],fitted_M)
+    foreach(r=rs, .combine=c, .export=c('Mstep','Estep','fitGLS','abind'), .packages=c('pROC','nlme')) %dopar% {
+      fitted_M <- Mstep(train[train$ID %in% trainPats,],r=r,nX=nX)
+      supervised <- Estep(train[train$ID %in% validatePats,],fitted_M,nX=nX)
       pROC::auc(train$Y[train$ID %in% validatePats],supervised)
     }
   }
@@ -551,7 +559,7 @@ objective_w <- function(w,args,lambda=0){
 numericGradientDescent <- function(x0, f, args=NULL, constIndex=1, alphas=c(1e-4,2e-4,5e-4,1e-3,2e-3,5e-3,.01,.02,.05,.1,.2,.5,1),
                                    lambda=0, maxIt=100, tol=1e-4){
   for (it in 1:maxIt){
-    grad <- nl.grad(x0,f,heps = .Machine$double.eps^(1/3),args,lambda)
+    grad <- nloptr::nl.grad(x0,f,heps = .Machine$double.eps^(1/3),args,lambda)
     if (any(x0==0)){
       grad[x0==0] <- sign(grad[x0==0]) * sapply(abs(grad[x0==0])-lambda, function(xi){max(xi,0)})
     }
@@ -602,11 +610,12 @@ cv.lambda <- function(C,y,V,w0=NULL,nCrosses=5,lambdas=NULL,surrIndex=1){
   })
   
   suppressWarnings({
-    grid <- foreach(i=1:nCrosses, .combine=cbind) %dopar% {
+    grid <- foreach(i=1:nCrosses, .combine=cbind, .export=c('numericGradientDescent','objective_w'),
+                    .packages=c('pROC','foreach','parallel','doParallel')) %dopar% {
     validatePats <- valPats_overall[[i]]
     trainPats <- setdiff(observedPats,validatePats)
     
-    foreach(lambda=lambdas, .combine=c) %dopar% {
+    foreach(lambda=lambdas, .combine=c, .export=c('numericGradientDescent','objective_w')) %dopar% {
       w_opt <- numericGradientDescent(w0,objective_w,args=list('C'=C[trainPats,],'y'=y[trainPats],'V'=V),
                                       constIndex=surrIndex,lambda=lambda,maxIt=50,tol=1e-4)
       objective_w(w_opt,args=list('C'=C[validatePats,],'y'=y[validatePats],'V'=V),lambda=0)
@@ -621,7 +630,7 @@ cv.lambda <- function(C,y,V,w0=NULL,nCrosses=5,lambdas=NULL,surrIndex=1){
 }
 
 
-samgep <- function(dat_train=NULL,dat_test=NULL,Cindices=NULL,w=NULL,w0=NULL,V=NULL,observed=NULL,
+samgep <- function(dat_train=NULL,dat_test=NULL,Cindices=NULL,w=NULL,w0=NULL,V=NULL,observed=NULL,nX=NULL,
                   Estep=Estep_partial,Xtrain=NULL,Xtest=NULL,alpha=NULL,r=NULL,lambda=NULL,surrIndex=NULL,nCores=1){
   if (is.null(observed)){
     observed <- unique(dat_train$ID)
@@ -667,29 +676,30 @@ samgep <- function(dat_train=NULL,dat_test=NULL,Cindices=NULL,w=NULL,w0=NULL,V=N
     
     # Define Xtrain, Xtest
     CWVtrain <- Ctrain %*% (w * V)
+    nX <- ncol(V)
     Xtrain <- data.frame(ID=dat_train$ID,Y=dat_train$Y,T=dat_train$T,Tlog=log(dat_train$T+1),H=dat_train$H,Hlog=log(dat_train$H+1))
-    Xtrain <- cbind(Xtrain,CWVtrain); colnames(Xtrain)[-c(1:6)] <- paste0('X',seq(ncol(V)))
+    Xtrain <- cbind(Xtrain,CWVtrain); colnames(Xtrain)[-c(1:6)] <- paste0('X',seq(nX))
     Xtrain$pY <- Xtrain$pInv <- 1
     if (!is.null(dat_test)){
       CWVtest <- Ctest %*% (w * V)
       Xtest <- data.frame(ID=dat_test$ID,Y=dat_test$Y,T=dat_test$T,Tlog=log(dat_test$T+1),H=dat_test$H,Hlog=log(dat_test$H+1))
-      Xtest <- cbind(Xtest,CWVtest); colnames(Xtest)[-c(1:6)] <- paste0('X',seq(ncol(V)))
+      Xtest <- cbind(Xtest,CWVtest); colnames(Xtest)[-c(1:6)] <- paste0('X',seq(nX))
     }
   }
   
   # Optimize r
   if (is.null(r)){
     message('Cross-validating r')
-    r <- cv.r(Xtrain,observed,Estep=Estep,parallel=parallel)$r_opt
+    r <- cv.r(Xtrain, observed, Estep=Estep, nX=nX)$r_opt
   }
   
   # Optimize alpha and predict
   message('Fitting MGP')
   if (is.null(alpha)){
-    result <- lineSearch(Xtrain, observed, Xtest, r=r, Estep=Estep)
+    result <- lineSearch(Xtrain, observed, Xtest, r=r, Estep=Estep, nX=nX)
   }
   else{
-    result <- lineSearch(Xtrain, observed, Xtest, alphas=alpha, r=r, Estep=Estep)
+    result <- lineSearch(Xtrain, observed, Xtest, alphas=alpha, r=r, Estep=Estep, nX=nX)
   }
   alpha <- result$alpha
   
