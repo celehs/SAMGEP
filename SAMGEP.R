@@ -62,132 +62,149 @@ Estep_partial <- function(dat,trained,nX=11){
   expit <- function(x){1/(1+exp(-x))}
   
   priorModel <- trained$priorModel; likeModel <- trained$likeModel; transCoefs <- trained$transCoefs
-  a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
-  amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
   prior_fitted <- predict(priorModel,dat,type='response')
+  # a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
+  # amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
   
-  post <- c()
-  for (pat in unique(dat$ID)){
-    # Find patient-specific parameters
-    patIdx <- which(dat$ID == pat)
-    Ti <- dat$T[patIdx]; Tlogi <- dat$Tlog[patIdx];
-    Hi <- unique(dat$H[patIdx]); Hlogi <- unique(dat$Hlog[patIdx])
-    prior_i <- prior_fitted[patIdx]
+  
+  ## C++ implementation
+  Estep_fast <- function(){
     
-    # Compute mu | Y=0; mu | Y=1
-    mu0 <- likeModel$beta %*% rbind(1,0,Hlogi,Ti,Tlogi,0,0,0)
-    mu1 <- likeModel$beta %*% rbind(1,1,Hlogi,Ti,Tlogi,Hlogi,Ti,Tlogi)
-    mus <- list(mu0,mu1)
+  }
+  
+  ## Slow R-based implementation of core Estep inference procedure
+  Estep_slow <- function(dat,prior_fitted,likeModel,transCoefs){
+    a1 <- likeModel$autoCoefs[3:4,]; a2 <- likeModel$autoCoefs[1:2,]
+    amin1 <- apply(a1,2,min); amin2 <- apply(a2,2,min)
     
-    # Compute marginal, conditional sigma_squareds
-    sigsq_like <- (likeModel$sigma * Hi^likeModel$alpha)^2   
-    sigsq_prior <- sapply(1:nX,function(i){c(1,1,Hlogi,mean(Ti),mean(Tlogi),Hlogi,mean(Ti),mean(Tlogi)) %*%
-        likeModel$std.errors[,,i] %*% c(1,1,Hlogi,mean(Ti),mean(Tlogi),Hlogi,mean(Ti),mean(Tlogi))})
-    sig <- sqrt(sigsq_like + sigsq_prior)
-    Sigma <- likeModel$corrMat * (sig %*% t(sig))
-    A1 <- sqrt(1-amin1^2) %*% t(sqrt(1-amin1^2)); A2 <- sqrt(1-amin2^2) %*% t(sqrt(1-amin2^2))
-    Sigma_cond1 <- A1 * Sigma; Sigma_cond2 <- A2 * Sigma
-    
-    Xi <- as.matrix(dat[patIdx,paste0('X',1:nX)])
-    
-    post_i <- c()
-    for (t in 1:length(Ti)){
-      # Patient has 1 timepoint
-      if (length(Ti) == 1){
-        logprior <- log(c(1-prior_i[t],prior_i[t]))
-        logprobs <- logprior + c(mvtnorm::dmvnorm(Xi[t,],mus[[1]][,t],Sigma,log=TRUE),
-                                 mvtnorm::dmvnorm(Xi[t,],mus[[2]][,t],Sigma,log=TRUE))
-        probs <- exp(logprobs - max(logprobs))
-        post_i <- c(post_i, probs[2]/sum(probs), rep(0,4))
-      }
+    post <- c()
+    for (pat in unique(dat$ID)){
+      # Find patient-specific parameters
+      patIdx <- which(dat$ID == pat)
+      Ti <- dat$T[patIdx]; Tlogi <- dat$Tlog[patIdx];
+      Hi <- unique(dat$H[patIdx]); Hlogi <- unique(dat$Hlog[patIdx])
+      prior_i <- prior_fitted[patIdx]
       
-      # Currently on patient's first timepoint
-      else if (t == 1){
-        X_comp <- c(Xi[t,],Xi[t+1,])
-        prior_it <- c(1-prior_i[t],prior_i[t])
-        if (Ti[t+1]-Ti[t]==1){
-          a <- a1; Sigma_cond <- Sigma_cond1
-        }
-        else{
-          a <- a2; Sigma_cond <- Sigma_cond2
+      # Compute mu | Y=0; mu | Y=1
+      mu0 <- likeModel$beta %*% rbind(1,0,Hlogi,Ti,Tlogi,0,0,0)
+      mu1 <- likeModel$beta %*% rbind(1,1,Hlogi,Ti,Tlogi,Hlogi,Ti,Tlogi)
+      mus <- list(mu0,mu1)
+      
+      # Compute marginal, conditional sigma_squareds
+      sigsq_like <- (likeModel$sigma * Hi^likeModel$alpha)^2   
+      sigsq_prior <- sapply(1:nX,function(i){c(1,1,Hlogi,mean(Ti),mean(Tlogi),Hlogi,mean(Ti),mean(Tlogi)) %*%
+          likeModel$std.errors[,,i] %*% c(1,1,Hlogi,mean(Ti),mean(Tlogi),Hlogi,mean(Ti),mean(Tlogi))})
+      sig <- sqrt(sigsq_like + sigsq_prior)
+      Sigma <- likeModel$corrMat * (sig %*% t(sig))
+      A1 <- sqrt(1-amin1^2) %*% t(sqrt(1-amin1^2)); A2 <- sqrt(1-amin2^2) %*% t(sqrt(1-amin2^2))
+      Sigma_cond1 <- A1 * Sigma; Sigma_cond2 <- A2 * Sigma
+      
+      Xi <- as.matrix(dat[patIdx,paste0('X',1:nX)])
+      
+      post_i <- c()
+      for (t in 1:length(Ti)){
+        # Patient has 1 timepoint
+        if (length(Ti) == 1){
+          logprior <- log(c(1-prior_i[t],prior_i[t]))
+          logprobs <- logprior + c(mvtnorm::dmvnorm(Xi[t,],mus[[1]][,t],Sigma,log=TRUE),
+                                   mvtnorm::dmvnorm(Xi[t,],mus[[2]][,t],Sigma,log=TRUE))
+          probs <- exp(logprobs - max(logprobs))
+          post_i <- c(post_i, probs[2]/sum(probs), rep(0,4))
         }
         
-        logprobs <- matrix(NA,2,2)
-        for (yn in 1:2){
-          for (yc in 1:2){
-            p <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t+1],Tlogi[t+1],as.integer(Ti[t+1]-Ti[t]==1),as.integer(Ti[t+1]-Ti[t]==1)*(yc-1)))
-            logprior <- log(prior_it[yc] * c(1-p,p)[yn])
-            muC <- mus[[yc]][,t]; muN <- mus[[yn]][,t+1] + a[1+(yc==yn),]*(Xi[t,]-muC)
-            loglike <- mvtnorm::dmvnorm(Xi[t,],muC,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t+1,],muN,Sigma_cond,log=TRUE)
-            logprobs[yc,yn] <- logprior + loglike
+        # Currently on patient's first timepoint
+        else if (t == 1){
+          X_comp <- c(Xi[t,],Xi[t+1,])
+          prior_it <- c(1-prior_i[t],prior_i[t])
+          if (Ti[t+1]-Ti[t]==1){
+            a <- a1; Sigma_cond <- Sigma_cond1
           }
-        }
-        probs <- exp(logprobs - max(logprobs))
-        post_i <- c(post_i, sum(probs[2,])/sum(probs), rep(0,4))
-      }
-      
-      # Currently on patient's last timepoint
-      else if (t == length(Ti)){
-        X_comp <- c(Xi[t-1,],Xi[t,])
-        prior_it <- c(1-prior_i[t-1], prior_i[t-1])
-        if (Ti[t]-Ti[t-1]==1){
-          a <- a1; Sigma_cond <- Sigma_cond1
-        }
-        else{
-          a <- a2; Sigma_cond <- Sigma_cond2
-        }
-        
-        logprobs <- matrix(NA,2,2)
-        for (yn in 1:2){
-          for (yc in 1:2){
-            p <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t],log(Ti[t]+1),as.integer(Ti[t]-Ti[t-1]==1),as.integer(Ti[t]-Ti[t-1]==1)*(yc-1)))
-            logprior <- log(prior_i[yc] * c(1-p,p)[yn])
-            muC <- mus[[yc]][,t-1]; muN <- mus[[yn]][,t] + a[1+(yc==yn),]*(Xi[t-1,]-muC)
-            loglike <- mvtnorm::dmvnorm(Xi[t-1,],muC,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t,],muN,Sigma_cond,log=TRUE)
-            logprobs[yc,yn] <- logprior + loglike
+          else{
+            a <- a2; Sigma_cond <- Sigma_cond2
           }
-        }
-        probs <- exp(logprobs - max(logprobs))
-        post_i <- c(post_i, sum(probs[,2])/sum(probs), probs/sum(probs))
-      }
-      
-      # Currently on intermediate timepoint
-      else{
-        X_comp <- c(Xi[t-1,],Xi[t,],Xi[t+1,])
-        prior_it <- c(1-prior_i[t-1],prior_i[t-1])
-        if (Ti[t]-Ti[t-1]==1){
-          aL <- a1; Sigma_condL <- Sigma_cond1
-        }
-        else{
-          aL <- a2; Sigma_condL <- Sigma_cond2
-        }
-        if (Ti[t+1]-Ti[t]==1){
-          aN <- a1; Sigma_condN <- Sigma_cond1
-        }
-        else{
-          aN <- a2; Sigma_condN <- Sigma_cond2
-        }
-        
-        logprobs <- array(NA,dim=c(2,2,2))
-        for (yn in 1:2){
-          for (yc in 1:2){
-            for (yl in 1:2){
-              p1 <- expit(transCoefs %*% c(1,yl-1,Hi,Ti[t],Tlogi[t],as.integer(Ti[t]-Ti[t-1]==1),as.integer(Ti[t]-Ti[t-1]==1)*(yl-1)))
-              p2 <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t+1],Tlogi[t+1],as.integer(Ti[t+1]-Ti[t]==1),as.integer(Ti[t+1]-Ti[t]==1)*(yc-1)))
-              logprior <- log(prior_it[yl] * c(1-p1,p1)[yc] * c(1-p2,p2)[yn])
-              muL <- mus[[yl]][,t-1]; muC <- mus[[yc]][,t] + aL[1+(yl==yc),]*(Xi[t-1,]-muL); muN <- mus[[yn]][,t+1] + aN[1+(yc==yn),]*(Xi[t,]-muC)
-              loglike <- mvtnorm::dmvnorm(Xi[t-1,],muL,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t,],muC,Sigma_condL,log=TRUE) + mvtnorm::dmvnorm(Xi[t+1,],muN,Sigma_condN,log=TRUE)
-              logprobs[yl,yc,yn] <- logprior + loglike
+          
+          logprobs <- matrix(NA,2,2)
+          for (yn in 1:2){
+            for (yc in 1:2){
+              p <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t+1],Tlogi[t+1],as.integer(Ti[t+1]-Ti[t]==1),as.integer(Ti[t+1]-Ti[t]==1)*(yc-1)))
+              logprior <- log(prior_it[yc] * c(1-p,p)[yn])
+              muC <- mus[[yc]][,t]; muN <- mus[[yn]][,t+1] + a[1+(yc==yn),]*(Xi[t,]-muC)
+              loglike <- mvtnorm::dmvnorm(Xi[t,],muC,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t+1,],muN,Sigma_cond,log=TRUE)
+              logprobs[yc,yn] <- logprior + loglike
             }
           }
+          probs <- exp(logprobs - max(logprobs))
+          post_i <- c(post_i, sum(probs[2,])/sum(probs), rep(0,4))
         }
-        probs <- exp(logprobs - max(logprobs))
-        post_i <- c(post_i, sum(probs[,2,])/sum(probs), probs[,,1]/sum(probs[,,1]))
+        
+        # Currently on patient's last timepoint
+        else if (t == length(Ti)){
+          X_comp <- c(Xi[t-1,],Xi[t,])
+          prior_it <- c(1-prior_i[t-1], prior_i[t-1])
+          if (Ti[t]-Ti[t-1]==1){
+            a <- a1; Sigma_cond <- Sigma_cond1
+          }
+          else{
+            a <- a2; Sigma_cond <- Sigma_cond2
+          }
+          
+          logprobs <- matrix(NA,2,2)
+          for (yn in 1:2){
+            for (yc in 1:2){
+              p <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t],log(Ti[t]+1),as.integer(Ti[t]-Ti[t-1]==1),as.integer(Ti[t]-Ti[t-1]==1)*(yc-1)))
+              logprior <- log(prior_i[yc] * c(1-p,p)[yn])
+              muC <- mus[[yc]][,t-1]; muN <- mus[[yn]][,t] + a[1+(yc==yn),]*(Xi[t-1,]-muC)
+              loglike <- mvtnorm::dmvnorm(Xi[t-1,],muC,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t,],muN,Sigma_cond,log=TRUE)
+              logprobs[yc,yn] <- logprior + loglike
+            }
+          }
+          probs <- exp(logprobs - max(logprobs))
+          post_i <- c(post_i, sum(probs[,2])/sum(probs), probs/sum(probs))
+        }
+        
+        # Currently on intermediate timepoint
+        else{
+          X_comp <- c(Xi[t-1,],Xi[t,],Xi[t+1,])
+          prior_it <- c(1-prior_i[t-1],prior_i[t-1])
+          if (Ti[t]-Ti[t-1]==1){
+            aL <- a1; Sigma_condL <- Sigma_cond1
+          }
+          else{
+            aL <- a2; Sigma_condL <- Sigma_cond2
+          }
+          if (Ti[t+1]-Ti[t]==1){
+            aN <- a1; Sigma_condN <- Sigma_cond1
+          }
+          else{
+            aN <- a2; Sigma_condN <- Sigma_cond2
+          }
+          
+          logprobs <- array(NA,dim=c(2,2,2))
+          for (yn in 1:2){
+            for (yc in 1:2){
+              for (yl in 1:2){
+                p1 <- expit(transCoefs %*% c(1,yl-1,Hi,Ti[t],Tlogi[t],as.integer(Ti[t]-Ti[t-1]==1),as.integer(Ti[t]-Ti[t-1]==1)*(yl-1)))
+                p2 <- expit(transCoefs %*% c(1,yc-1,Hi,Ti[t+1],Tlogi[t+1],as.integer(Ti[t+1]-Ti[t]==1),as.integer(Ti[t+1]-Ti[t]==1)*(yc-1)))
+                logprior <- log(prior_it[yl] * c(1-p1,p1)[yc] * c(1-p2,p2)[yn])
+                muL <- mus[[yl]][,t-1]; muC <- mus[[yc]][,t] + aL[1+(yl==yc),]*(Xi[t-1,]-muL); muN <- mus[[yn]][,t+1] + aN[1+(yc==yn),]*(Xi[t,]-muC)
+                loglike <- mvtnorm::dmvnorm(Xi[t-1,],muL,Sigma,log=TRUE) + mvtnorm::dmvnorm(Xi[t,],muC,Sigma_condL,log=TRUE) + mvtnorm::dmvnorm(Xi[t+1,],muN,Sigma_condN,log=TRUE)
+                logprobs[yl,yc,yn] <- logprior + loglike
+              }
+            }
+          }
+          probs <- exp(logprobs - max(logprobs))
+          post_i <- c(post_i, sum(probs[,2,])/sum(probs), probs[,,1]/sum(probs[,,1]))
+        }
       }
+      
+      post <- c(post, post_i)
     }
-
-    post <- c(post, post_i)
+    
+    post
   }
+  
+  
+  post <- Estep_slow(dat,prior_fitted,likeModel,transCoefs)
   
   # Reformat and save output
   output <- post[seq(1,length(post),5)]

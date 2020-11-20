@@ -2,7 +2,18 @@ library(pROC)
 
 source('SAMGEP.R')
 source('simulate.R')
-trainData <- get(load('trainData.RData'))
+
+
+## Test just E step (for C++ development)
+
+dat <- readRDS('Estep_testDat_100pats.rds')
+fitted <- readRDS('Estep_fittedModel.rds')
+
+system.time(Estep_result <- Estep_partial(dat,fitted,nX=10))
+print(paste('Sanity Check: AUC =',auc(dat$Y,Estep_result)))
+
+
+## Test entire procedure 
 
 nTrain <- 1000
 nTest <- 100
@@ -17,3 +28,5 @@ samgep_auc <- auc(simulated$testSet$Y[idx], samgep_result$margMix[idx])
 mgpsup_auc <- auc(simulated$testSet$Y[idx], samgep_result$margSup[idx])
 mgpsemisup_auc <- auc(simulated$testSet$Y[idx], samgep_result$margSemisup[idx])
 print(paste('AUCs:',samgep_auc,mgpsup_auc,mgpsemisup_auc))
+
+  
