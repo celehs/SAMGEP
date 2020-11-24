@@ -1,0 +1,35 @@
+Package: SAMGEP
+Type: Package
+Title: A Semi-supervised Method for Prediction of Phenotype Event Times Using the Electronic Health Record
+Version: 0.1.0-1
+Authors@R: c(
+    person("Yuri", "Ahuja", role = c("aut", "cre"), email = "Yuri_Ahuja@hms.harvard.edu"),
+    person("Tianxi", "Cai", role = c("aut")),
+    person(family = "PARSE LTD", role = c("aut"))   
+    )
+Description: A novel semi-supervised machine learning algorithm to predict phenotype event times using Electronic Health Record (EHR) data. See Ahuja et al. (BioArxiv) for details.
+URL: https://github.com/celehs/SAMGEP
+BugReports: https://github.com/celehs/SAMGEP/issues
+License: GPL-3
+Encoding: UTF-8
+RoxygenNote: 7.1.1
+Depends: 
+    R (>= 3.0)
+Imports: 
+    stats,
+    mvtnorm,
+    nlme,
+    pROC,
+    abind,
+    nloptr,
+    foreach,
+    doParallel,
+    parallel
+LinkingTo: 
+    Rcpp, 
+    RcppArmadillo
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+LazyData: true
