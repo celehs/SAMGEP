@@ -1,8 +1,9 @@
 library(pROC)
 
+Rcpp::sourceCpp('src/dmvnrm_arma.cpp')
+Rcpp::sourceCpp('src/dmvnorm_arma.cpp')
 source('SAMGEP.R')
 source('simulate.R')
-
 
 ## Test just E step (for C++ development)
 
@@ -11,7 +12,6 @@ fitted <- readRDS('Estep_fittedModel.rds')
 
 system.time(Estep_result <- Estep_partial(dat,fitted,nX=10))
 print(paste('Sanity Check: AUC =',auc(dat$Y,Estep_result)))
-
 
 ## Test entire procedure 
 
