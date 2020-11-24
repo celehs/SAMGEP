@@ -24,7 +24,8 @@ Imports:
     nloptr,
     foreach,
     doParallel,
-    parallel
+    parallel,
+    Rcpp
 LinkingTo: 
     Rcpp, 
     RcppArmadillo

@@ -1,7 +1,6 @@
 `%do%` <- foreach::`%do%`
 `%dopar%` <- foreach::`%dopar%`
 
-library(glmnet)
 library(stats)
 library(mvtnorm)
 library(nlme)
