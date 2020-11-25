@@ -3,5 +3,5 @@
 #' Click \href{https://github.com/celehs/SAMGEP/blob/master/data-raw/simdata.R}{HERE} to view details.
 #' 
 #' @examples 
-#' str(simulate)
-"simulate"
+#' str(simdata)
+"simdata"

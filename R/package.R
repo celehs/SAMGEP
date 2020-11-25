@@ -6,6 +6,7 @@
 #' @name SAMGEP-package
 #' @keywords package
 #' @useDynLib SAMGEP
-#' @import stats mvtnorm nlme pROC abind nloptr
+#' @import stats mvtnorm nlme abind nloptr
 #' @import foreach doParallel parallel
+#' @importFrom pROC auc
 NULL

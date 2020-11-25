@@ -1,15 +1,6 @@
 `%do%` <- foreach::`%do%`
 `%dopar%` <- foreach::`%dopar%`
-
-library(stats)
-library(mvtnorm)
-library(nlme)
-library(pROC)
-library(foreach)
-library(doParallel)
-library(parallel)
-library(abind)
-library(nloptr)
+utils::globalVariables(c("it","lambda","r","pY"))
 
 
 fitGLS <- function(dat, nX = 11, r = 1) {
@@ -252,8 +243,7 @@ Mstep <- function(train, train_interTemp = NULL, nX = 11, r = 1) {
   }
   else {
     transCoefs <- glm(Ycurr ~ Yprev + H + T + Tlog + as.factor(T - Tprev == 1) + Yprev:as.factor(T - Tprev == 1),
-      weights = pY, data = train_interTemp, family = "quasibinomial"
-    )$coefficients
+      weights = pY, data = train_interTemp, family = "quasibinomial")$coefficients
   }
 
   likeModel <- fitGLS(train, nX = nX, r = r)
