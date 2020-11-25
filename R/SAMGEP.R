@@ -568,9 +568,9 @@ lineSearch <- function(train, observedPats, test = NULL, nCrosses = 5, alphas = 
     })
 
     alpha_results <- as.matrix(foreach(
-      i = 1:nCrosses, .combine = cbind, .packages = c("pROC", "nlme"),
+      i = 1:nCrosses, .combine = cbind, .packages = c("pROC", "nlme"), .noexport="dmvnrm_arma_fast",
       .export = c("EM", "Estep", "Mstep", "fitGLS", "cumulative_prob", "abind")
-    ) %dopar% {
+    ) %do% {
       validatePats <- valPats_overall[[i]]
       trainPats <- setdiff(observedPats, validatePats)
       validateIndices <- which(train$ID %in% validatePats)
@@ -627,12 +627,13 @@ cv.r <- function(train, observedPats, nCrosses = 5, rs = seq(0, 1, .1), Estep = 
   suppressWarnings({
     grid <- foreach(
       i = 1:nCrosses, .combine = cbind, .export = c("Mstep", "Estep", "fitGLS", "abind"),
-      .packages = c("pROC", "nlme", "foreach", "parallel", "doParallel")
-    ) %dopar% {
+      .packages = c("pROC", "nlme", "foreach", "parallel", "doParallel"), .noexport="dmvnrm_arma_fast"
+    ) %do% {
       validatePats <- valPats_overall[[i]]
       trainPats <- setdiff(observedPats, validatePats)
 
-      foreach(r = rs, .combine = c, .export = c("Mstep", "Estep", "fitGLS", "abind"), .packages = c("pROC", "nlme")) %dopar% {
+      foreach(r = rs, .combine = c, .export = c("Mstep", "Estep", "fitGLS", "abind"),
+              .packages = c("pROC", "nlme"), .noexport="dmvnrm_arma_fast") %do% {
         fitted_M <- Mstep(train[train$ID %in% trainPats, ], r = r, nX = nX)
         supervised <- Estep(train[train$ID %in% validatePats, ], fitted_M, nX = nX)
         pROC::auc(train$Y[train$ID %in% validatePats], supervised)
@@ -732,12 +733,12 @@ cv.lambda <- function(C, y, V, w0 = NULL, nCrosses = 5, lambdas = NULL, surrInde
   suppressWarnings({
     grid <- foreach(
       i = 1:nCrosses, .combine = cbind, .export = c("numericGradientDescent", "objective_w"),
-      .packages = c("pROC", "foreach", "parallel", "doParallel")
-    ) %dopar% {
+      .packages = c("pROC", "foreach", "parallel", "doParallel"), .noexport="dmvnrm_arma_fast"
+    ) %do% {
       validatePats <- valPats_overall[[i]]
       trainPats <- setdiff(observedPats, validatePats)
 
-      foreach(lambda = lambdas, .combine = c, .export = c("numericGradientDescent", "objective_w")) %dopar% {
+      foreach(lambda = lambdas, .combine = c, .export = c("numericGradientDescent", "objective_w"), .noexport="dmvnrm_arma_fast") %do% {
         w_opt <- numericGradientDescent(w0, objective_w,
           args = list("C" = C[trainPats, ], "y" = y[trainPats], "V" = V),
           constIndex = surrIndex, lambda = lambda, maxIt = 50, tol = 1e-4
@@ -775,8 +776,8 @@ samgep <- function(dat_train = NULL, dat_test = NULL, Cindices = NULL, w = NULL,
     observedIndices <- which(dat_train$ID %in% observed)
 
     # Optimize w
-    message("Fitting feature weights")
     if (is.null(w)) {
+      message("Fitting feature weights")
       if (is.null(w0)) {
         w0 <- glm(dat_train$Y[observedIndices] ~ Ctrain[observedIndices, ], family = "quasibinomial")$coefficients[-1]
         w0[is.na(w0)] <- 0
@@ -791,8 +792,8 @@ samgep <- function(dat_train = NULL, dat_test = NULL, Cindices = NULL, w = NULL,
       )
 
       # Optimize lambda
-      message("Cross-validating lambda")
       if (is.null(lambda)) {
+        message("Cross-validating lambda")
         lambda <- cv.lambda(Ctrain[observedIndices, ], dat_train$Y[observedIndices], V, w0, surrIndex = surrIndex)$lambda_opt
       }
 
@@ -832,6 +833,10 @@ samgep <- function(dat_train = NULL, dat_test = NULL, Cindices = NULL, w = NULL,
     result <- lineSearch(Xtrain, observed, Xtest, alphas = alpha, r = r, Estep = Estep, nX = nX)
   }
   alpha <- result$alpha
+  
+  if (nClust > 1){
+    parallel::stopCluster(clust) 
+  }
 
   # Result
   return(list(

@@ -17,7 +17,7 @@ library(pROC)
 
 ```{r}
 samgep_result <- with(
-  simdata, samgep(dat_train=trainSet, dat_test=testSet, Cindices=6:160,
+  simdata, samgep(dat_train=trainSet, dat_test=testSet, Cindices=6:160, lambda=0.05,
                   V=embeddings, observed=unique(trainSet$ID)[1:50], nCores=1))
 ```
 
