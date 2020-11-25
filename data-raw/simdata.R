@@ -180,7 +180,7 @@ simulate <- function(trainDat,totDat,Xinds,nTrain,nTest,embedDim,rho=0.4,
 
 set.seed(123)
 
-nTrain <- 1000
+nTrain <- 500
 nTest <- 100
 embedDim <- 10
 load('~/inst/extdata/trainData.RData')
