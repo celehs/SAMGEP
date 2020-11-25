@@ -23,14 +23,7 @@ samgep_result <- with(
 
 
 ```{r, message=FALSE}
-idx <- which(simulated$testSet$ID %in% 101:1000)
-samgep_auc <- pROC::auc(simdata$testSet$Y[idx], samgep_result$margMix[idx])
-mgpsup_auc <- pROC::auc(simdata$testSet$Y[idx], samgep_result$margSup[idx])
-mgpsemisup_auc <- pROCauc(simdata$testSet$Y[idx], samgep_result$margSemisup[idx])
-```
-
-
-```{r}
-print(paste('AUCs:',samgep_auc,mgpsup_auc,mgpsemisup_auc))
+samgep_auc <- pROC::auc(simdata$testSet$Y, samgep_result$margMix)
+print(paste('AUC:',samgep_auc))
 ```
 

@@ -497,7 +497,7 @@ EM <- function(train, observedPats, test = NULL, maxIt = 1, r = 0.8, tol = 0.01,
   trained_sup <- trained_semisup <- Mstep(train[observedIndices, ], r = r, nX = nX)
   if (!is.null(test)) {
     prediction <- Estep(test, trained_sup, nX = nX)
-    aucs <- c(pROC::auc(test$Y, prediction), rep(0, maxIt))
+    suppressMessages({aucs <- c(pROC::auc(test$Y, prediction), rep(0, maxIt))})
   }
 
   for (it in 1:maxIt) {
@@ -539,7 +539,7 @@ EM <- function(train, observedPats, test = NULL, maxIt = 1, r = 0.8, tol = 0.01,
 
     if (!is.null(test)) {
       testpred <- Estep(test, trained_semisup, nX = nX)
-      aucs[it + 1] <- pROC::auc(test$Y, testpred)
+      suppressMessages({aucs[it + 1] <- pROC::auc(test$Y, testpred)})
     }
 
     if (all(abs(prediction - lastY) < tol)) {
@@ -583,7 +583,7 @@ lineSearch <- function(train, observedPats, test = NULL, nCrosses = 5, alphas = 
 
           sapply(alphas, function(alpha) {
             mixture <- alpha * semisupervised + (1 - alpha) * supervised
-            pROC::auc(train$Y[validateIndices], mixture)
+            suppressMessages({pROC::auc(train$Y[validateIndices], mixture)})
           })
         },
         error = function(e) {
@@ -636,7 +636,7 @@ cv.r <- function(train, observedPats, nCrosses = 5, rs = seq(0, 1, .1), Estep = 
               .packages = c("pROC", "nlme"), .noexport="dmvnrm_arma_fast") %do% {
         fitted_M <- Mstep(train[train$ID %in% trainPats, ], r = r, nX = nX)
         supervised <- Estep(train[train$ID %in% validatePats, ], fitted_M, nX = nX)
-        pROC::auc(train$Y[train$ID %in% validatePats], supervised)
+        suppressMessages({pROC::auc(train$Y[train$ID %in% validatePats], supervised)})
       }
     }
   })
@@ -834,7 +834,7 @@ samgep <- function(dat_train = NULL, dat_test = NULL, Cindices = NULL, w = NULL,
   }
   alpha <- result$alpha
   
-  if (nClust > 1){
+  if (nCores > 1){
     parallel::stopCluster(clust) 
   }
 
