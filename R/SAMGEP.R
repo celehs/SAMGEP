@@ -2,6 +2,28 @@
 `%dopar%` <- foreach::`%dopar%`
 utils::globalVariables(c("it","lambda","r","pY"))
 
+# SAMGEP.R: Contains samgep function. See Ahuja et al. (2020), BioArxiv for details.
+# Author: Yuri Ahuja
+# Last Updated: 11/25/2020
+
+# INPUT:
+# dat_train = Raw training data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C) (optional if Xtrain is supplied)
+# dat_test = Raw testing data set, including patient IDs (ID), a healthcare utilization feature (H) and censoring time (C) (optional)
+# Cindices = Column indices of EHR feature counts in dat_train/dat_test (optional if Xtrain is supplied)
+# w = Pre-optimized EHR feature weights (optional if Xtrain is supplied)
+# w0 = Initial (i.e. partially optimized) EHR feature weights (optional if Xtrain is supplied)
+# V = nFeatures x nEmbeddings embeddings matrix (optional if Xtrain is supplied)
+# observed = IDs of patients with observed outcome labels (optional if Xtrain is supplied)
+# nX = Number of embedding features (defaults to 10)
+# Estep = E-step function to use (Estep_partial or Estep_full; defaults to Estep_partial)
+# Xtrain = Embedded training data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C) (optional)
+# Xtest = Embedded testing data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C) (optional)
+# alpha = Relative weight of semi-supervised to supervised MGP predictors in SAMGEP ensemble (optional)
+# r = Scaling factor of inter-temporal correlation (optional)
+# lambda = L1 regularization hyperparameter for feature weight (w) optimization (optional)
+# surrIndex = Index (within Cindices) of primary surrogate index for outcome event (optional)
+# nCores = Number of cores to use for parallelization (defaults to 1)
+
 
 fitGLS <- function(dat, nX = 11, r = 1) {
   repInds <- which(duplicated(dat$ID))
@@ -755,6 +777,35 @@ cv.lambda <- function(C, y, V, w0 = NULL, nCrosses = 5, lambdas = NULL, surrInde
 }
 
 
+#' @param dat_train (optional if Xtrain is supplied) Raw training data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C)
+#' @param dat_test (optional) Raw testing data set, including patient IDs (ID), a healthcare utilization feature (H) and censoring time (C)
+#' @param Cindices (optional if Xtrain is supplied) Column indices of EHR feature counts in dat_train/dat_test
+#' @param w (optional if Xtrain is supplied) Pre-optimized EHR feature weights
+#' @param w0 (optional if Xtrain is supplied) Initial (i.e. partially optimized) EHR feature weights
+#' @param V (optional if Xtrain is supplied) nFeatures x nEmbeddings embeddings matrix
+#' @param observed (optional if Xtrain is supplied) IDs of patients with observed outcome labels
+#' @param nX Number of embedding features (defaults to 10)
+#' @param Estep E-step function to use (Estep_partial or Estep_full; defaults to Estep_partial)
+#' @param Xtrain (optional) Embedded training data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C)
+#' @param Xtest (optional) Embedded testing data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C)
+#' @param alpha (optional) Relative weight of semi-supervised to supervised MGP predictors in SAMGEP ensemble
+#' @param r (optional) Scaling factor of inter-temporal correlation
+#' @param lambda (optional) L1 regularization hyperparameter for feature weight (w) optimization
+#' @param surrIndex (optional) Index (within Cindices) of primary surrogate index for outcome event
+#' @param nCores Number of cores to use for parallelization (defaults to 1)
+#' 
+#' @return w_opt Optimized feature weights (w)
+#' @return r_opt Optimized inter-temporal correlation scaling factor (r)
+#' @return alpha_opt Optimized semi-supservised:supervised relative weight (alpha)
+#' @return lambda_opt Optiized L1 regularization hyperparameter (lambda)
+#' @return margSup Posterior probability predictions of supervised model (MGP Supervised)
+#' @return margSemisup Posterior probability predictions of semi-supervised model (MGP Semi-supervised)
+#' @return margMix Posterior probability predictions of SAMGEP
+#' @return cumSup Cumulative probability predictions of supervised model (MGP Supervised)
+#' @return cumSemisup Cumulative probability predictions of semi-supervised model (MGP Semi-supervised)
+#' @return cumMix Cumulative probability predictions of SAMGEP
+#'
+#' @export
 samgep <- function(dat_train = NULL, dat_test = NULL, Cindices = NULL, w = NULL, w0 = NULL, V = NULL, observed = NULL, nX = NULL,
                    Estep = Estep_partial, Xtrain = NULL, Xtest = NULL, alpha = NULL, r = NULL, lambda = NULL, surrIndex = NULL, nCores = 1) {
   if (is.null(observed)) {
