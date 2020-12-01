@@ -1,6 +1,6 @@
 `%do%` <- foreach::`%do%`
 `%dopar%` <- foreach::`%dopar%`
-utils::globalVariables(c("it","lambda","r","pY"))
+utils::globalVariables(c("it","lambda","r","pY","i"))
 
 # SAMGEP.R: Contains samgep function. See Ahuja et al. (2020), BioArxiv for details.
 # Author: Yuri Ahuja
@@ -777,6 +777,8 @@ cv.lambda <- function(C, y, V, w0 = NULL, nCrosses = 5, lambdas = NULL, surrInde
 }
 
 
+#' Semi-supervised Adaptive Markov Gaussian Process (SAMGEP)
+#' 
 #' @param dat_train (optional if Xtrain is supplied) Raw training data set, including patient IDs (ID), healthcare utilization feature (H) and censoring time (C)
 #' @param dat_test (optional) Raw testing data set, including patient IDs (ID), a healthcare utilization feature (H) and censoring time (C)
 #' @param Cindices (optional if Xtrain is supplied) Column indices of EHR feature counts in dat_train/dat_test

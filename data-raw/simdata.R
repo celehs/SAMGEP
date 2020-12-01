@@ -1,5 +1,7 @@
 library(bindata)
 
+expit <- function(x){1/(1+exp(-x))}
+
 simulate <- function(trainDat,totDat,Xinds,nTrain,nTest,embedDim,rho=0.4,
                      yt_gen='correct',xy_gen='lognormal',nInformative=NA){
   
@@ -183,7 +185,7 @@ set.seed(123)
 nTrain <- 500
 nTest <- 100
 embedDim <- 10
-load('~/inst/extdata/trainData.RData')
+load('archive/trainData.RData')
 
 simdata <- simulate(trainData[[1]], trainData[[2]], 6:160, nTrain, nTest, embedDim)
 str(simdata)
