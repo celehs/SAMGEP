@@ -24,6 +24,10 @@ samgep_result <- with(
 
 ```{r, message=FALSE}
 samgep_auc <- pROC::auc(simdata$testSet$Y, samgep_result$margMix)
+<<<<<<< HEAD
 print(paste('AUC:',round(samgep_auc,digits=3)))
+=======
+print(paste('AUC:',samgep_auc))
+>>>>>>> b9adc1faa469f80498b711d4557832e6772c88a9
 ```
 
