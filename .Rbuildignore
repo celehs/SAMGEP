@@ -1,0 +1,7 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+README_files
+SAMGEP_E_step_algorithm.pdf
+data-raw
+dev
+archive

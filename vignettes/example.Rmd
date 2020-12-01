@@ -1,0 +1,29 @@
+---
+title: "Simulated Example"
+author: "Yuri Ahuja"
+date: "11/24/2020"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simulated Example}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+library(SAMGEP)
+library(pROC)
+```
+
+
+```{r}
+samgep_result <- with(
+  simdata, samgep(dat_train=trainSet, dat_test=testSet, Cindices=6:160, lambda=0.05,
+                  V=embeddings, observed=unique(trainSet$ID)[1:50], nCores=1))
+```
+
+
+```{r, message=FALSE}
+samgep_auc <- pROC::auc(simdata$testSet$Y, samgep_result$margMix)
+print(paste('AUC:',round(samgep_auc,digits=3)))
+```
+
