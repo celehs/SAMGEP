@@ -10,7 +10,8 @@ Calibration of Risk with Noisy Event Times (SCORNET) yields a consistent
 and efficient survival curve estimator by leveraging a small size of
 current status labels and a large size of imperfect surrogate features.
 
-![Schematic of the SAMGEP algorthm.](img/samgep_flowchart.png)
+![Schematic of the SAMGEP
+algorthm.](https://github.com/celehs/SAMGEP/blob/main/img/samgep_flowchart.png?raw=true)
 
 ## Installation
 
