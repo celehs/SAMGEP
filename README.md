@@ -3,6 +3,8 @@
 
 [![CRAN](https://www.r-pkg.org/badges/version/SAMGEP)](https://CRAN.R-project.org/package=SAMGEP)
 
+## Overview
+
 Leveraging large-scale electronic health record (EHR) data to estimate
 survival curves for clinical events can enable more powerful risk
 estimation and comparative effectiveness research. Semi-supervised
